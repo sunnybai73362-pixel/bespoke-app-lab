@@ -1,48 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Send, Smile, Paperclip, Phone, Video, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useMessages } from "@/hooks/useMessages";
+import { useContacts } from "@/hooks/useContacts";
+import { useAuth } from "@/contexts/AuthContext";
 
-interface Message {
-  id: string;
-  text: string;
-  sender: "me" | "other";
-  timestamp: string;
-  status?: "sent" | "delivered" | "read";
-}
-
-const mockMessages: Message[] = [
-  {
-    id: "1",
-    text: "Hey! How are you doing?",
-    sender: "other",
-    timestamp: "10:30 AM",
-    status: "read"
-  },
-  {
-    id: "2",
-    text: "I'm doing great! Just working on some exciting projects. How about you?",
-    sender: "me",
-    timestamp: "10:32 AM",
-    status: "read"
-  },
-  {
-    id: "3",
-    text: "That sounds awesome! I'd love to hear more about it. Maybe we can catch up over coffee this weekend?",
-    sender: "other",
-    timestamp: "10:35 AM",
-    status: "read"
-  },
-  {
-    id: "4",
-    text: "Absolutely! I know a great place downtown. Let's plan it 😊",
-    sender: "me",
-    timestamp: "10:37 AM",
-    status: "delivered"
-  }
-];
 
 interface ChatWindowProps {
   selectedChatId?: string;
@@ -50,20 +15,16 @@ interface ChatWindowProps {
 
 export const ChatWindow = ({ selectedChatId }: ChatWindowProps) => {
   const [newMessage, setNewMessage] = useState("");
-  const [messages, setMessages] = useState(mockMessages);
+  const { messages, sendMessage } = useMessages(selectedChatId);
+  const { contacts } = useContacts();
+  const { user } = useAuth();
+  
+  const currentContact = contacts.find(c => c.id === selectedChatId);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!newMessage.trim()) return;
     
-    const message: Message = {
-      id: Date.now().toString(),
-      text: newMessage,
-      sender: "me",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: "sent"
-    };
-    
-    setMessages([...messages, message]);
+    await sendMessage(newMessage);
     setNewMessage("");
   };
 
@@ -99,11 +60,16 @@ export const ChatWindow = ({ selectedChatId }: ChatWindowProps) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
-              <AvatarFallback className="bg-primary/20 text-primary font-semibold">SJ</AvatarFallback>
+              <AvatarImage src={currentContact?.avatar_url || undefined} />
+              <AvatarFallback className="bg-primary/20 text-primary font-semibold">
+                {currentContact?.full_name.split(' ').map(n => n[0]).join('') || 'U'}
+              </AvatarFallback>
             </Avatar>
             <div>
-              <h3 className="font-semibold">Sarah Johnson</h3>
-              <p className="text-sm text-green-500">online</p>
+              <h3 className="font-semibold">{currentContact?.full_name || 'Unknown'}</h3>
+              <p className={`text-sm ${currentContact?.online ? 'text-green-500' : 'text-muted-foreground'}`}>
+                {currentContact?.online ? 'online' : 'offline'}
+              </p>
             </div>
           </div>
           
@@ -124,39 +90,44 @@ export const ChatWindow = ({ selectedChatId }: ChatWindowProps) => {
       {/* Messages */}
       <ScrollArea className="flex-1 p-4 chat-scroll">
         <div className="space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.sender === 'me' ? 'justify-end' : 'justify-start'}`}
-            >
+          {messages.map((message) => {
+            const isMe = message.sender_id === user?.id;
+            return (
               <div
-                className={`
-                  max-w-[70%] rounded-2xl p-3 message-bubble shadow-message
-                  ${message.sender === 'me' 
-                    ? 'bg-gradient-message text-chat-text-sent ml-12' 
-                    : 'bg-chat-message-received text-chat-text-received mr-12'
-                  }
-                `}
+                key={message.id}
+                className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
               >
-                <p className="text-sm leading-relaxed">{message.text}</p>
-                <div className="flex items-center justify-end gap-1 mt-2">
-                  <span className="text-xs opacity-70">{message.timestamp}</span>
-                  {message.sender === 'me' && (
-                    <div className="flex">
-                      <div className={`w-1 h-1 rounded-full ${
-                        message.status === 'read' ? 'bg-blue-400' : 
-                        message.status === 'delivered' ? 'bg-gray-400' : 'bg-gray-300'
-                      }`}></div>
-                      <div className={`w-1 h-1 rounded-full ml-0.5 ${
-                        message.status === 'read' ? 'bg-blue-400' : 
-                        message.status === 'delivered' ? 'bg-gray-400' : 'bg-gray-300'
-                      }`}></div>
-                    </div>
-                  )}
+                <div
+                  className={`
+                    max-w-[70%] rounded-2xl p-3 message-bubble shadow-message
+                    ${isMe 
+                      ? 'bg-gradient-message text-chat-text-sent ml-12' 
+                      : 'bg-chat-message-received text-chat-text-received mr-12'
+                    }
+                  `}
+                >
+                  <p className="text-sm leading-relaxed">{message.content}</p>
+                  <div className="flex items-center justify-end gap-1 mt-2">
+                    <span className="text-xs opacity-70">
+                      {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {isMe && (
+                      <div className="flex">
+                        <div className={`w-1 h-1 rounded-full ${
+                          message.status === 'read' ? 'bg-blue-400' : 
+                          message.status === 'delivered' ? 'bg-gray-400' : 'bg-gray-300'
+                        }`}></div>
+                        <div className={`w-1 h-1 rounded-full ml-0.5 ${
+                          message.status === 'read' ? 'bg-blue-400' : 
+                          message.status === 'delivered' ? 'bg-gray-400' : 'bg-gray-300'
+                        }`}></div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </ScrollArea>
 

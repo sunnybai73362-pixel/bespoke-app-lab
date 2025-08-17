@@ -1,9 +1,29 @@
 import { useState } from "react";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ChatWindow } from "@/components/ChatWindow";
+import { useAuth } from "@/contexts/AuthContext";
+import Auth from "@/pages/Auth";
 
 const Index = () => {
   const [selectedChatId, setSelectedChatId] = useState<string>();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-chat-background">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto bg-gradient-primary rounded-full flex items-center justify-center shadow-glow mb-4 animate-pulse">
+            <span className="text-xl font-bold text-primary-foreground">LE</span>
+          </div>
+          <p className="text-muted-foreground">Loading LoftyEyes...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Auth />;
+  }
 
   return (
     <div className="h-screen flex bg-chat-background overflow-hidden">

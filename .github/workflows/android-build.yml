@@ -13,10 +13,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Node
+      - name: Set up Node (Capacitor v6 requires Node 20+)
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Set up JDK 17
@@ -34,7 +34,7 @@ jobs:
                      "build-tools;34.0.0" \
                      "platforms;android-34"
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm ci || npm install
 
       - name: Build web app
@@ -42,7 +42,9 @@ jobs:
 
       - name: Add/Sync Capacitor Android
         run: |
-          npx cap add android || true
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
           npx cap sync android
 
       - name: Gradle cache
@@ -51,9 +53,7 @@ jobs:
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew --no-daemon clean
-          ./gradlew --no-daemon assembleDebug \
-            -Dorg.gradle.java.home=$JAVA_HOME
+          ./gradlew --no-daemon assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

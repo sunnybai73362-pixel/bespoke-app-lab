@@ -14,7 +14,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Setup Node.js (⚡ updated to Node 20 LTS)
+      # Setup Node.js (⚡ Node 20 for Capacitor v6+)
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -42,20 +42,20 @@ jobs:
       - name: Install deps
         run: npm ci || npm install
 
-      # Build web assets (Vite/React/etc.)
+      # Build web assets
       - name: Build web app
         run: npm run build
 
-      # Add Android if missing, then sync
+      # Add Android platform if missing, then sync
       - name: Add/Sync Capacitor Android
         run: |
           if [ ! -d "android" ]; then
             echo "⚡ Android folder not found, adding platform..."
-            npx cap add android --skip-dependency-install
+            npx cap add android
           fi
           npx cap sync android
 
-      # Cache Gradle (to speed up builds)
+      # Cache Gradle
       - name: Gradle cache
         uses: gradle/actions/setup-gradle@v3
 
@@ -65,7 +65,7 @@ jobs:
           cd android
           ./gradlew --no-daemon assembleDebug
 
-      # Upload APK as build artifact
+      # Upload APK
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

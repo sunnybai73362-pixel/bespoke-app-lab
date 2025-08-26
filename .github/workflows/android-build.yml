@@ -1,4 +1,4 @@
-name: Android Build (LoftyEyes -> APK)
+name: Android Build (Capacitor -> APK)
 
 on:
   push:
@@ -10,25 +10,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout repo
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Setup Node.js (⚡ Node 20 for Capacitor v6+)
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '18'
           cache: 'npm'
 
-      # Setup Java (required for Gradle/Android)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # Setup Android SDK
       - name: Install Android SDK (cmdline tools)
         uses: android-actions/setup-android@v3
 
@@ -38,34 +34,27 @@ jobs:
                      "build-tools;34.0.0" \
                      "platforms;android-34"
 
-      # Install dependencies
       - name: Install deps
         run: npm ci || npm install
 
-      # Build web assets
       - name: Build web app
         run: npm run build
 
-      # Add Android platform if missing, then sync
       - name: Add/Sync Capacitor Android
         run: |
-          if [ ! -d "android" ]; then
-            echo "⚡ Android folder not found, adding platform..."
-            npx cap add android
-          fi
+          npx cap add android || true
           npx cap sync android
 
-      # Cache Gradle
       - name: Gradle cache
         uses: gradle/actions/setup-gradle@v3
 
-      # Build debug APK
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew --no-daemon assembleDebug
+          ./gradlew --no-daemon clean
+          ./gradlew --no-daemon assembleDebug \
+            -Dorg.gradle.java.home=$JAVA_HOME
 
-      # Upload APK
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

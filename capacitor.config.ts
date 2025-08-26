@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.7e24f1a759244b76905da5285b38e574',
+  appId: 'com.loftyeyes.app',
   appName: 'LoftyEyes',
   webDir: 'dist',
   server: {

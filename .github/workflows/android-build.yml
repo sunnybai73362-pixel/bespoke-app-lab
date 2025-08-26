@@ -42,7 +42,6 @@ jobs:
 
       - name: Add/Sync Capacitor Android
         run: |
-          npx cap add android || true
           npx cap sync android
 
       - name: Gradle cache

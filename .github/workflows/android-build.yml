@@ -1,4 +1,4 @@
-name: Android Build (Capacitor -> APK)
+name: Android Build (LoftyEyes -> APK)
 
 on:
   push:
@@ -10,21 +10,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout repo
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # Setup Node.js
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: '18'
           cache: 'npm'
 
+      # Setup Java (required for Gradle/Android)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
+      # Setup Android SDK
       - name: Install Android SDK (cmdline tools)
         uses: android-actions/setup-android@v3
 
@@ -34,29 +38,36 @@ jobs:
                      "build-tools;34.0.0" \
                      "platforms;android-34"
 
+      # Install dependencies
       - name: Install deps
         run: npm ci || npm install
 
+      # Build web assets (Vite/React/etc.)
       - name: Build web app
         run: npm run build
 
+      # Add Android if missing, then sync
       - name: Add/Sync Capacitor Android
         run: |
+          if [ ! -d "android" ]; then
+            echo "⚡ Android folder not found, adding platform..."
+            npx cap add android --skip-dependency-install
+          fi
           npx cap sync android
 
+      # Cache Gradle (to speed up builds)
       - name: Gradle cache
         uses: gradle/actions/setup-gradle@v3
 
+      # Build debug APK
       - name: Build Debug APK
         run: |
           cd android
           ./gradlew --no-daemon assembleDebug
 
+      # Upload APK as build artifact
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BespokeApp-Debug-APK
+          name: LoftyEyes-Debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
-      - name: Force Java 17 in Gradle
-        run: |
-          echo "org.gradle.java.home=/usr/lib/jvm/temurin-17-jdk-amd64" >> android/gradle.properties

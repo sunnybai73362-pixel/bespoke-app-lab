@@ -27,8 +27,9 @@ export const SignUpForm = ({ onToggleForm }: SignUpFormProps) => {
       await signUp(email, password, fullName, username)
       toast({
         title: "Account created!",
-        description: "Welcome to LoftyEyes! You can now start chatting.",
+        description: "Please sign in to continue. If email confirmation is enabled, check your inbox.",
       })
+      onToggleForm()
     } catch (error: any) {
       toast({
         title: "Error",

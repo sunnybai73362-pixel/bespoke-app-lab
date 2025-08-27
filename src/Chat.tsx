@@ -16,14 +16,14 @@ interface Message {
 
 interface ChatProps {
   chatId: string;
-  currentUserId: string; // pass this from auth context or props
+  currentUserId: string;
 }
 
 export default function Chat({ chatId, currentUserId }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
 
-  // Fetch messages for this chat
+  // Fetch messages
   const fetchMessages = async () => {
     const { data, error } = await supabase
       .from("messages")
@@ -35,6 +35,24 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
       console.error("Error fetching messages:", error.message);
     } else {
       setMessages(data as Message[]);
+      markMessagesAsRead(data as Message[]);
+    }
+  };
+
+  // Mark all received messages as read
+  const markMessagesAsRead = async (msgs: Message[]) => {
+    const unread = msgs.filter(
+      (m) => m.sender_id !== currentUserId && !m.read
+    );
+
+    if (unread.length > 0) {
+      const ids = unread.map((m) => m.id);
+      const { error } = await supabase
+        .from("messages")
+        .update({ read: true })
+        .in("id", ids);
+
+      if (error) console.error("Error updating read:", error.message);
     }
   };
 
@@ -46,7 +64,7 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
       id: uuidv4(),
       chat_id: chatId,
       sender_id: currentUserId,
-      receiver_id: null, // you can set if needed
+      receiver_id: null,
       content: newMessage,
       created_at: new Date().toISOString(),
       read: false,
@@ -60,7 +78,7 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
     setNewMessage("");
   };
 
-  // Subscribe to realtime messages
+  // Realtime subscription
   useEffect(() => {
     fetchMessages();
 
@@ -76,7 +94,26 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
         },
         (payload) => {
           const newMsg = payload.new as Message;
-          setMessages((prev) => [...prev, newMsg]);
+          setMessages((prev) => {
+            const updated = [...prev, newMsg];
+            markMessagesAsRead(updated);
+            return updated;
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `chat_id=eq.${chatId}`,
+        },
+        (payload) => {
+          const updatedMsg = payload.new as Message;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === updatedMsg.id ? updatedMsg : m))
+          );
         }
       )
       .subscribe();
@@ -88,7 +125,7 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
 
   return (
     <div className="flex flex-col h-full bg-gray-100">
-      {/* Messages List */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {messages.map((msg) => {
           const isMine = msg.sender_id === currentUserId;
@@ -110,8 +147,7 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
-                  {isMine &&
-                    (msg.read ? " ✅✅" : " ✅")}
+                  {isMine && (msg.read ? " ✅✅" : " ✅")}
                 </span>
               </div>
             </div>
@@ -119,7 +155,7 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
         })}
       </div>
 
-      {/* Input Box */}
+      {/* Input */}
       <div className="p-3 border-t bg-white flex gap-2">
         <input
           type="text"
@@ -137,69 +173,4 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
       </div>
     </div>
   );
-}  // Mark messages as delivered/read
-  useEffect(() => {
-    const markAsRead = async () => {
-      if (!user) return;
-
-      await supabase
-        .from("messages")
-        .update({ delivered: true, read: true })
-        .eq("chat_id", chatId)
-        .neq("sender_id", user.id); // don’t mark own messages
-    };
-
-    markAsRead();
-  }, [chatId, user]);
-
-  // Send message
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !user) return;
-
-    const { error } = await supabase.from("messages").insert([
-      {
-        chat_id: chatId,
-        sender_id: user.id,
-        content: newMessage.trim(),
-        delivered: true,
-        read: false,
-      },
-    ]);
-
-    if (error) console.error(error);
-    else setNewMessage("");
-  };
-
-  return (
-    <div className="p-4 max-w-md mx-auto">
-      <div className="border rounded-lg p-3 h-80 overflow-y-auto bg-white shadow">
-        {messages.map((msg) => (
-          <div key={msg.id} className="mb-2">
-            <p className="text-gray-800">{msg.content}</p>
-            <span className="text-xs text-gray-500">
-              {msg.read ? "✓✓ Read" : msg.delivered ? "✓✓ Delivered" : "✓ Sent"}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 flex gap-2">
-        <input
-          type="text"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          className="flex-1 border rounded-lg p-2"
-          placeholder="Type a message..."
-        />
-        <button
-          onClick={sendMessage}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg"
-        >
-          Send
-        </button>
-      </div>
-    </div>
-  );
-};
-
-export default Chat;
+}

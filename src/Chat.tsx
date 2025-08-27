@@ -1,40 +1,116 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 
-export default function Chat({ chatId }: { chatId: string }) {
-  const { user } = useAuth();
+interface ChatProps {
+  chatId: string;
+}
+
+export default function Chat({ chatId }: ChatProps) {
   const [messages, setMessages] = useState<any[]>([]);
-  const [content, setContent] = useState("");
-  const [otherUser, setOtherUser] = useState<any>(null);
-  const [typing, setTyping] = useState(false);
+  const [input, setInput] = useState("");
+  const [typingUser, setTypingUser] = useState<string | null>(null);
 
-  /* 🔹 Load messages + realtime */
   useEffect(() => {
-    if (!chatId) return;
-
-    const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*, profiles(full_name, username)")
-        .eq("chat_id", chatId)
-        .order("created_at");
-
-      if (!error) setMessages(data || []);
-    };
-
     loadMessages();
 
+    // Realtime subscription
     const channel = supabase
-      .channel(`chat-${chatId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
-        async (payload) => {
-          const msg = payload.new as any;
+      .channel("messages")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        setMessages((prev) => [...prev, payload.new]);
+      })
+      .subscribe();
 
-          if (msg.sender_id !== user.id) {
-            await supabase.from("messages").update({ delivered: true }).eq("id", msg.id);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chatId]);
+
+  const loadMessages = async () => {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, content, sender_id, created_at, delivered, read")
+      .eq("chat_id", chatId)
+      .order("created_at", { ascending: true });
+
+    if (!error && data) setMessages(data);
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim()) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from("messages").insert({
+      chat_id: chatId,
+      sender_id: user.id,
+      content: input,
+      delivered: true,
+      read: false,
+    });
+
+    setInput("");
+  };
+
+  // Typing indicator
+  const handleTyping = async (val: string) => {
+    setInput(val);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("profiles").update({ typing: val.length > 0 }).eq("id", user.id);
+  };
+
+  // Subscribe to typing
+  useEffect(() => {
+    const channel = supabase
+      .channel("typing")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload) => {
+        if (payload.new.typing) {
+          setTypingUser(payload.new.username);
+        } else {
+          setTypingUser(null);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  return (
+    <div className="flex flex-col h-screen max-w-md mx-auto">
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        {messages.map((m) => (
+          <div key={m.id} className={`p-2 rounded ${m.sender_id === "me" ? "bg-blue-100" : "bg-gray-100"}`}>
+            <div>{m.content}</div>
+            <div className="text-xs text-gray-500">
+              {m.delivered ? "✓" : ""} {m.read ? "✓" : ""}
+            </div>
+          </div>
+        ))}
+        {typingUser && <div className="text-sm text-gray-400">{typingUser} is typing...</div>}
+      </div>
+      <div className="p-4 flex gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => handleTyping(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          placeholder="Type a message..."
+          className="flex-1 border p-2 rounded"
+        />
+        <button onClick={sendMessage} className="px-4 py-2 bg-green-500 text-white rounded">
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}            await supabase.from("messages").update({ delivered: true }).eq("id", msg.id);
           }
 
           setMessages((prev) => [...prev, msg]);

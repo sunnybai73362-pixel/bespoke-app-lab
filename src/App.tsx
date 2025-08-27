@@ -26,5 +26,11 @@ const App = () => (
     </AuthProvider>
   </QueryClientProvider>
 );
+import Chat from "./pages/Chat";
 
+<Routes>
+  <Route path="/" element={<Index />} />
+  <Route path="/chat" element={<Chat />} />
+  <Route path="*" element={<NotFound />} />
+</Routes>
 export default App;

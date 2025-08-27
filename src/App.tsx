@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 
 import Index from "./pages/Index";
@@ -15,26 +15,27 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
-        {/* Toasts */}
         <Toaster />
         <Sonner />
-
-        {/* Router */}
         <BrowserRouter>
           <Routes>
-            {/* Landing / Dashboard */}
             <Route path="/" element={<Index />} />
-
-            {/* Chat page */}
             <Route path="/chat/:chatId" element={<ChatWrapper />} />
-
-            {/* Catch all */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
+);
+
+export default App;
+
+function ChatWrapper() {
+  const { chatId } = useParams();
+  if (!chatId) return <div>No chat selected</div>;
+  return <Chat chatId={chatId} />;
+}  </QueryClientProvider>
 );
 
 export default App;

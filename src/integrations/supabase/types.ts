@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      chats: {
+        Row: {
+          created_at: string | null
+          id: string
+          user1: string
+          user2: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          user1: string
+          user2: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          user1?: string
+          user2?: string
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           created_at: string
@@ -45,7 +66,10 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          deleted_by_receiver: boolean | null
+          deleted_by_sender: boolean | null
           id: string
+          is_deleted: boolean | null
           message_type: Database["public"]["Enums"]["message_type"]
           receiver_id: string
           sender_id: string
@@ -54,7 +78,10 @@ export type Database = {
         Insert: {
           content: string
           created_at?: string
+          deleted_by_receiver?: boolean | null
+          deleted_by_sender?: boolean | null
           id?: string
+          is_deleted?: boolean | null
           message_type?: Database["public"]["Enums"]["message_type"]
           receiver_id: string
           sender_id: string
@@ -63,7 +90,10 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          deleted_by_receiver?: boolean | null
+          deleted_by_sender?: boolean | null
           id?: string
+          is_deleted?: boolean | null
           message_type?: Database["public"]["Enums"]["message_type"]
           receiver_id?: string
           sender_id?: string

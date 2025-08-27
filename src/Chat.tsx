@@ -1,32 +1,22 @@
 import { useEffect, useState } from "react";
-import { supabase } from "./integrations/supabase";  // adjust path if needed
+import { supabase } from "../integrations/supabase";
 
 interface Message {
   id: string;
   content: string;
+  sender: string;
   created_at: string;
-  full_name: string;
-  username: string;
 }
 
 const Chat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
 
+  // Load messages
   useEffect(() => {
-    // Load old messages
-    const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .order("created_at", { ascending: true });
+    fetchMessages();
 
-      if (!error && data) setMessages(data as Message[]);
-    };
-
-    loadMessages();
-
-    // Listen for new messages
+    // Realtime subscription
     const channel = supabase
       .channel("chat-room")
       .on(
@@ -43,16 +33,81 @@ const Chat = () => {
     };
   }, []);
 
-  const sendMessage = async () => {
+  const fetchMessages = async () => {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .order("created_at", { ascending: true });
+
+    if (!error && data) {
+      setMessages(data as Message[]);
+    }
+  };
+
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!newMessage.trim()) return;
 
     const { error } = await supabase.from("messages").insert([
       {
         content: newMessage,
-        full_name: "Saqib", // replace with logged-in user's name
-        username: "saqib1", // replace with logged-in user's username
+        sender: "Me", // 👉 Replace with logged-in user later
       },
     ]);
+
+    if (!error) setNewMessage("");
+  };
+
+  return (
+    <div className="flex flex-col h-screen max-w-md mx-auto bg-gray-100">
+      {/* Header */}
+      <div className="p-4 text-center font-bold bg-blue-600 text-white">
+        Chat Room 💬
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`p-2 rounded-lg max-w-xs ${
+              msg.sender === "Me"
+                ? "ml-auto bg-blue-500 text-white"
+                : "mr-auto bg-gray-300 text-black"
+            }`}
+          >
+            <p>{msg.content}</p>
+            <span className="block text-xs opacity-70">
+              {new Date(msg.created_at).toLocaleTimeString()}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Input */}
+      <form
+        onSubmit={sendMessage}
+        className="flex items-center p-4 bg-white border-t"
+      >
+        <input
+          type="text"
+          className="flex-1 border rounded-lg px-3 py-2 mr-2"
+          placeholder="Type a message..."
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+        />
+        <button
+          type="submit"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg"
+        >
+          Send
+        </button>
+      </form>
+    </div>
+  );
+};
+
+export default Chat;    ]);
 
     if (!error) setNewMessage("");
   };

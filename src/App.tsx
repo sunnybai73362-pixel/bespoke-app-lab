@@ -1,9 +1,9 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "./components/ui/toaster";
+import { Toaster as Sonner } from "./components/ui/sonner";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider } from "./contexts/AuthContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Chat from "./pages/Chat";
@@ -19,7 +19,8 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/chat/:chatId" element={<Chat />} />
+            <Route path="/chat" element={<Chat />} />
+            {/* Catch-all for undefined routes */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
@@ -28,12 +29,6 @@ const App = () => (
   </QueryClientProvider>
 );
 
-export default App;
-/* 🔹 Wrapper to read chatId from URL and pass into Chat.tsx */
-import { useParams } from "react-router-dom";
-
-function ChatWrapper() {
-  const { chatId } = useParams();
-  if (!chatId) return <div>No chat selected.</div>;
+export default App;  if (!chatId) return <div>No chat selected.</div>;
   return <Chat chatId={chatId} />;
 }

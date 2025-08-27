@@ -7,7 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import Chat from "./pages/Chat";   // 👈 import inside with other pages
+import Chat from "./pages/Chat";
 
 const queryClient = new QueryClient();
 
@@ -15,12 +15,20 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
+        {/* Toasts */}
         <Toaster />
         <Sonner />
+
+        {/* Router */}
         <BrowserRouter>
           <Routes>
+            {/* Landing / Dashboard */}
             <Route path="/" element={<Index />} />
-            <Route path="/chat" element={<Chat />} /> {/* 👈 Chat route */}
+
+            {/* Chat page */}
+            <Route path="/chat/:chatId" element={<ChatWrapper />} />
+
+            {/* Catch all */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
@@ -30,3 +38,12 @@ const App = () => (
 );
 
 export default App;
+
+/* 🔹 Wrapper to read chatId from URL and pass into Chat.tsx */
+import { useParams } from "react-router-dom";
+
+function ChatWrapper() {
+  const { chatId } = useParams();
+  if (!chatId) return <div>No chat selected.</div>;
+  return <Chat chatId={chatId} />;
+}

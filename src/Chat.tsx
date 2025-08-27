@@ -1,40 +1,203 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/contexts/AuthContext"; // ✅ Get logged in user
+import { useAuth } from "@/contexts/AuthContext";
 
-interface Message {
-  id: string;
-  content: string;
-  created_at: string;
-  sender_id: string;
-  full_name: string;
-  username: string;
-}
+export default function Chat({ chatId }: { chatId: string }) {
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<any[]>([]);
+  const [content, setContent] = useState("");
+  const [otherUser, setOtherUser] = useState<any>(null);
+  const [typing, setTyping] = useState(false);
 
-const Chat = () => {
-  const { user } = useAuth(); // ✅ Logged-in Supabase user
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState("");
-
-  // Load existing messages
+  /* 🔹 Load messages + realtime */
   useEffect(() => {
+    if (!chatId) return;
+
     const loadMessages = async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select("id, content, created_at, sender_id, profiles(full_name, username)")
-        .order("created_at", { ascending: true });
+        .select("*, profiles(full_name, username)")
+        .eq("chat_id", chatId)
+        .order("created_at");
 
-      if (error) console.error("Error loading messages:", error);
-      else {
-        const mapped = data.map((msg: any) => ({
-          id: msg.id,
-          content: msg.content,
-          created_at: msg.created_at,
-          sender_id: msg.sender_id,
-          full_name: msg.profiles?.full_name || "Unknown",
-          username: msg.profiles?.username || "unknown",
-        }));
-        setMessages(mapped);
+      if (!error) setMessages(data || []);
+    };
+
+    loadMessages();
+
+    const channel = supabase
+      .channel(`chat-${chatId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
+        async (payload) => {
+          const msg = payload.new as any;
+
+          if (msg.sender_id !== user.id) {
+            await supabase.from("messages").update({ delivered: true }).eq("id", msg.id);
+          }
+
+          setMessages((prev) => [...prev, msg]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chatId, user]);
+
+  /* 🔹 Mark as seen when chat is opened */
+  useEffect(() => {
+    if (!chatId || !user) return;
+    supabase
+      .from("messages")
+      .update({ seen: true })
+      .eq("chat_id", chatId)
+      .neq("sender_id", user.id);
+  }, [chatId, user]);
+
+  /* 🔹 Fetch other user info */
+  useEffect(() => {
+    const fetchOtherUser = async () => {
+      const { data: chat } = await supabase
+        .from("chats")
+        .select("user1, user2")
+        .eq("id", chatId)
+        .single();
+
+      if (!chat) return;
+
+      const otherId = chat.user1 === user.id ? chat.user2 : chat.user1;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, full_name, username, avatar_url, online, last_seen, typing")
+        .eq("id", otherId)
+        .single();
+
+      setOtherUser(profile);
+    };
+
+    fetchOtherUser();
+
+    // Subscribe to presence changes
+    const channel = supabase
+      .channel(`presence-${chatId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          if (payload.new.id === otherUser?.id) {
+            setOtherUser(payload.new);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chatId, user]);
+
+  /* 🔹 Handle typing indicator */
+  const handleTyping = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setContent(e.target.value);
+
+    // mark self as typing
+    await supabase
+      .from("profiles")
+      .update({ typing: true })
+      .eq("id", user.id);
+
+    // stop typing after 2s
+    setTimeout(async () => {
+      await supabase.from("profiles").update({ typing: false }).eq("id", user.id);
+    }, 2000);
+  };
+
+  const sendMessage = async () => {
+    if (!content.trim() || !user) return;
+
+    await supabase.from("messages").insert({
+      chat_id: chatId,
+      content,
+      sender_id: user.id,
+      delivered: false,
+      seen: false,
+    });
+
+    setContent("");
+    await supabase.from("profiles").update({ typing: false }).eq("id", user.id);
+  };
+
+  return (
+    <div className="flex flex-col h-screen">
+      {/* 🔹 Chat Header */}
+      <div className="p-3 border-b flex items-center bg-gray-50">
+        {/* Avatar */}
+        <img
+          src={otherUser?.avatar_url || "https://ui-avatars.com/api/?name=" + (otherUser?.full_name || "User")}
+          alt="avatar"
+          className="w-10 h-10 rounded-full mr-3"
+        />
+
+        <div className="flex flex-col">
+          <div className="font-semibold">{otherUser?.full_name}</div>
+          <div className="text-sm text-gray-600">
+            {otherUser?.typing
+              ? "typing..."
+              : otherUser?.online
+              ? "Online"
+              : otherUser?.last_seen
+              ? `last seen at ${new Date(otherUser.last_seen).toLocaleTimeString()}`
+              : "Offline"}
+          </div>
+        </div>
+      </div>
+
+      {/* 🔹 Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`p-2 rounded-lg max-w-xs ${
+              msg.sender_id === user.id
+                ? "bg-blue-500 text-white ml-auto"
+                : "bg-gray-200"
+            }`}
+          >
+            <div>{msg.content}</div>
+            <div className="text-xs mt-1 text-right">
+              {msg.seen
+                ? "✅✅ (blue)"
+                : msg.delivered
+                ? "✅✅"
+                : "✅"}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 🔹 Input */}
+      <div className="p-3 flex border-t">
+        <input
+          type="text"
+          value={content}
+          onChange={handleTyping}
+          className="flex-1 border rounded-lg p-2"
+          placeholder="Type a message..."
+        />
+        <button
+          onClick={sendMessage}
+          className="ml-2 bg-blue-500 text-white px-4 py-2 rounded-lg"
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  );
+                                                    }        setMessages(mapped);
       }
     };
 

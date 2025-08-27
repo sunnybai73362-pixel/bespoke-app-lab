@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "./integrations/supabase/client";
-import { v4 as uuidv4 } from "uuid";
 
 interface Message {
   id: string;
@@ -16,7 +15,7 @@ interface Message {
 
 interface ChatProps {
   chatId: string;
-  currentUserId: string;
+  currentUserId: string; // pass this from auth context or props
 }
 
 export default function Chat({ chatId, currentUserId }: ChatProps) {
@@ -35,24 +34,6 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
       console.error("Error fetching messages:", error.message);
     } else {
       setMessages(data as Message[]);
-      markMessagesAsRead(data as Message[]);
-    }
-  };
-
-  // Mark all received messages as read
-  const markMessagesAsRead = async (msgs: Message[]) => {
-    const unread = msgs.filter(
-      (m) => m.sender_id !== currentUserId && !m.read
-    );
-
-    if (unread.length > 0) {
-      const ids = unread.map((m) => m.id);
-      const { error } = await supabase
-        .from("messages")
-        .update({ read: true })
-        .in("id", ids);
-
-      if (error) console.error("Error updating read:", error.message);
     }
   };
 
@@ -60,25 +41,24 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
   const sendMessage = async () => {
     if (!newMessage.trim()) return;
 
-    const message: Message = {
-      id: uuidv4(),
-      chat_id: chatId,
-      sender_id: currentUserId,
-      receiver_id: null,
-      content: newMessage,
-      created_at: new Date().toISOString(),
-      read: false,
-    };
+    const { error } = await supabase.from("messages").insert([
+      {
+        chat_id: chatId,
+        sender_id: currentUserId,
+        receiver_id: null, // set if needed
+        content: newMessage,
+        read: false,
+      },
+    ]);
 
-    setMessages((prev) => [...prev, message]); // Optimistic UI
-
-    const { error } = await supabase.from("messages").insert(message);
-    if (error) console.error("Error sending message:", error.message);
+    if (error) {
+      console.error("Error sending message:", error.message);
+    }
 
     setNewMessage("");
   };
 
-  // Realtime subscription
+  // Subscribe to realtime changes
   useEffect(() => {
     fetchMessages();
 
@@ -94,26 +74,7 @@ export default function Chat({ chatId, currentUserId }: ChatProps) {
         },
         (payload) => {
           const newMsg = payload.new as Message;
-          setMessages((prev) => {
-            const updated = [...prev, newMsg];
-            markMessagesAsRead(updated);
-            return updated;
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "messages",
-          filter: `chat_id=eq.${chatId}`,
-        },
-        (payload) => {
-          const updatedMsg = payload.new as Message;
-          setMessages((prev) =>
-            prev.map((m) => (m.id === updatedMsg.id ? updatedMsg : m))
-          );
+          setMessages((prev) => [...prev, newMsg]);
         }
       )
       .subscribe();

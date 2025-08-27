@@ -196,23 +196,18 @@ export const ChatSidebar = ({ selectedChatId, onChatSelect }: ChatSidebarProps) 
                     if (!user) return;
                     try {
                       setCreating(true);
-                      // Check for existing conversation (both orders)
-                      const { data: existing } = await supabase
+                      // Normalize pair and upsert to avoid duplicates
+                      const p1 = user.id < r.id ? user.id : r.id;
+                      const p2 = user.id < r.id ? r.id : user.id;
+                      const { data: upserted, error: upsertError } = await supabase
                         .from('conversations')
+                        .upsert(
+                          { participant_1: p1, participant_2: p2 },
+                          { onConflict: 'participant_1,participant_2' }
+                        )
                         .select('id')
-                        .or(`and(participant_1.eq.${user.id},participant_2.eq.${r.id}),and(participant_1.eq.${r.id},participant_2.eq.${user.id})`)
-                        .maybeSingle();
-
-                      let convoId = existing?.id;
-                      if (!convoId) {
-                        const { data: inserted, error: insertError } = await supabase
-                          .from('conversations')
-                          .insert({ participant_1: user.id, participant_2: r.id })
-                          .select('id')
-                          .single();
-                        if (insertError) throw insertError;
-                        convoId = inserted.id;
-                      }
+                        .single();
+                      if (upsertError) throw upsertError;
 
                       setOpenNewChat(false);
                       setQuery("");

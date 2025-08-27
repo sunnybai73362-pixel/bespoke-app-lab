@@ -43,21 +43,18 @@ export const useMessages = (conversationPartnerId: string | null) => {
       .channel('messages')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'messages',
-          filter: `or(and(sender_id.eq.${user.id},receiver_id.eq.${conversationPartnerId}),and(sender_id.eq.${conversationPartnerId},receiver_id.eq.${user.id}))`
-        },
+        { event: '*', schema: 'public', table: 'messages' },
         (payload) => {
+          const m = payload.new as Message | null;
+          if (!m) return;
+          const isThisChat =
+            (m.sender_id === user.id && m.receiver_id === conversationPartnerId) ||
+            (m.sender_id === conversationPartnerId && m.receiver_id === user.id);
+          if (!isThisChat) return;
           if (payload.eventType === 'INSERT') {
-            setMessages(prev => [...prev, payload.new as Message])
+            setMessages(prev => [...prev, m]);
           } else if (payload.eventType === 'UPDATE') {
-            setMessages(prev => 
-              prev.map(msg => 
-                msg.id === payload.new.id ? payload.new as Message : msg
-              )
-            )
+            setMessages(prev => prev.map(msg => (msg.id === m.id ? m : msg)));
           }
         }
       )
@@ -85,15 +82,15 @@ export const useMessages = (conversationPartnerId: string | null) => {
       console.error('Error sending message:', error)
     }
 
-    // Update or create conversation
+    // Update or create conversation (normalized order with onConflict)
+    const p1 = user.id < conversationPartnerId ? user.id : conversationPartnerId
+    const p2 = user.id < conversationPartnerId ? conversationPartnerId : user.id
     await supabase
       .from('conversations')
-      .upsert({
-        participant_1: user.id < conversationPartnerId ? user.id : conversationPartnerId,
-        participant_2: user.id < conversationPartnerId ? conversationPartnerId : user.id,
-        last_message: content.trim(),
-        last_message_at: new Date().toISOString()
-      })
+      .upsert(
+        { participant_1: p1, participant_2: p2, last_message: content.trim(), last_message_at: new Date().toISOString() },
+        { onConflict: 'participant_1,participant_2' }
+      )
   }
 
   return {

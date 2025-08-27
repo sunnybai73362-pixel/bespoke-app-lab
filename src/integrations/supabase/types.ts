@@ -14,27 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      chats: {
-        Row: {
-          created_at: string | null
-          id: string
-          user1: string
-          user2: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          user1: string
-          user2: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          user1?: string
-          user2?: string
-        }
-        Relationships: []
-      }
       conversations: {
         Row: {
           created_at: string

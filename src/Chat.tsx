@@ -9,32 +9,209 @@ export default function Chat({ chatId }: ChatProps) {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const [typingUser, setTypingUser] = useState<string | null>(null);
+  const [otherUser, setOtherUser] = useState<any>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadMessages();
+    init();
+  }, [chatId]);
 
-    // Realtime subscription
-    const channel = supabase
-      .channel("messages")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
-        setMessages((prev) => [...prev, payload.new]);
-      })
+  const init = async () => {
+    await loadMessages();
+    await fetchOtherUser();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) setCurrentUserId(user.id);
+
+    // listen for new messages
+    const msgInsertChannel = supabase
+      .channel("messages-insert")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          if (payload.new.chat_id === chatId) {
+            setMessages((prev) => [...prev, payload.new]);
+          }
+        }
+      )
+      .subscribe();
+
+    // listen for message updates (read/delivered changes)
+    const msgUpdateChannel = supabase
+      .channel("messages-update")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "messages" },
+        (payload) => {
+          if (payload.new.chat_id === chatId) {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === payload.new.id ? payload.new : m))
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    // listen for typing updates
+    const typingChannel = supabase
+      .channel("typing")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          if (payload.new.typing) {
+            setTypingUser(payload.new.username);
+          } else {
+            setTypingUser(null);
+          }
+        }
+      )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(msgInsertChannel);
+      supabase.removeChannel(msgUpdateChannel);
+      supabase.removeChannel(typingChannel);
     };
-  }, [chatId]);
+  };
 
   const loadMessages = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("messages")
-      .select("id, content, sender_id, created_at, delivered, read")
+      .select("id, content, sender_id, created_at, delivered, read, chat_id")
       .eq("chat_id", chatId)
       .order("created_at", { ascending: true });
-
-    if (!error && data) setMessages(data);
+    if (data) setMessages(data);
   };
+
+  const fetchOtherUser = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: chat } = await supabase
+      .from("chats")
+      .select("user1, user2")
+      .eq("id", chatId)
+      .single();
+
+    const otherUserId = chat?.user1 === user.id ? chat?.user2 : chat?.user1;
+
+    if (otherUserId) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, username, last_seen, online")
+        .eq("id", otherUserId)
+        .single();
+
+      setOtherUser(profile);
+
+      // mark all unread messages from them as read
+      await supabase
+        .from("messages")
+        .update({ read: true })
+        .eq("chat_id", chatId)
+        .eq("sender_id", otherUserId)
+        .eq("read", false);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim()) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from("messages").insert({
+      chat_id: chatId,
+      sender_id: user.id,
+      content: input,
+      delivered: true,
+      read: false,
+    });
+
+    setInput("");
+    await supabase.from("profiles").update({ typing: false }).eq("id", user.id);
+  };
+
+  const handleTyping = async (val: string) => {
+    setInput(val);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("profiles").update({ typing: val.length > 0 }).eq("id", user.id);
+  };
+
+  const renderTicks = (msg: any) => {
+    if (msg.read) {
+      return <span className="text-blue-500">✓✓</span>; // blue ticks
+    }
+    if (msg.delivered) {
+      return <span className="text-gray-500">✓✓</span>; // gray double ticks
+    }
+    return <span className="text-gray-400">✓</span>; // single tick
+  };
+
+  return (
+    <div className="flex flex-col h-screen max-w-md mx-auto">
+      {/* Header */}
+      <div className="p-4 border-b">
+        <div className="font-bold">{otherUser?.username || "Chat"}</div>
+        <div className="text-sm text-gray-500">
+          {otherUser?.online
+            ? "Online"
+            : otherUser?.last_seen
+            ? `last seen at ${new Date(otherUser.last_seen).toLocaleTimeString()}`
+            : "Offline"}
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            className={`p-2 rounded max-w-[70%] ${
+              m.sender_id === currentUserId
+                ? "bg-blue-100 self-end"
+                : "bg-gray-100 self-start"
+            }`}
+          >
+            <div>{m.content}</div>
+            <div className="text-xs text-gray-500 flex items-center gap-1">
+              {renderTicks(m)}
+              <span>{new Date(m.created_at).toLocaleTimeString()}</span>
+            </div>
+          </div>
+        ))}
+        {typingUser && (
+          <div className="text-sm text-gray-400">{typingUser} is typing...</div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="p-4 flex gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => handleTyping(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          placeholder="Type a message..."
+          className="flex-1 border p-2 rounded"
+        />
+        <button onClick={sendMessage} className="px-4 py-2 bg-green-500 text-white rounded">
+          Send
+        </button>
+      </div>
+    </div>
+  );
+        }  };
 
   const sendMessage = async () => {
     if (!input.trim()) return;

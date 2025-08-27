@@ -1,40 +1,130 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
 
-export default function Chat() {
-  const { chatId } = useParams<{ chatId: string }>();
-  const [messages, setMessages] = useState<any[]>([]);
-  const [input, setInput] = useState("");
-  const [typingUser, setTypingUser] = useState<string | null>(null);
-  const [otherUser, setOtherUser] = useState<any>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+interface Message {
+  id: string;
+  chat_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  delivered: boolean;
+  read: boolean;
+}
 
-  // init
+const Chat = () => {
+  const { chatId } = useParams();
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+
+  // Fetch messages
   useEffect(() => {
     if (!chatId) return;
-    let cleanup: (() => void) | undefined;
 
-    (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) setCurrentUserId(user.id);
+    const fetchMessages = async () => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("chat_id", chatId)
+        .order("created_at", { ascending: true });
 
-      await loadMessages(chatId);
-      await fetchOtherUser(chatId);
+      if (error) console.error(error);
+      else setMessages(data || []);
+    };
 
-      // realtime: new messages
-      const msgInsertChannel = supabase
-        .channel(`messages-insert-${chatId}`)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "messages" },
-          (payload) => {
-            if (payload.new.chat_id === chatId) {
-              setMessages((prev) => [...prev, payload.new]);
-            }
-          }
+    fetchMessages();
+
+    // Realtime subscription
+    const channel = supabase
+      .channel("chat-room-" + chatId)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new as Message]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chatId]);
+
+  // Mark all received messages as "delivered" and "read" when user opens chat
+  useEffect(() => {
+    const markAsRead = async () => {
+      if (!chatId || !user) return;
+      await supabase
+        .from("messages")
+        .update({ delivered: true, read: true })
+        .eq("chat_id", chatId)
+        .neq("sender_id", user.id);
+    };
+    markAsRead();
+  }, [chatId, user]);
+
+  // Send message
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !user) return;
+
+    const { error } = await supabase.from("messages").insert([
+      {
+        chat_id: chatId,
+        sender_id: user.id,
+        content: newMessage.trim(),
+        delivered: true,
+        read: false,
+      },
+    ]);
+
+    if (error) console.error(error);
+    else setNewMessage("");
+  };
+
+  const renderTick = (msg: Message) => {
+    if (msg.read) return "✅✅"; // Read
+    if (msg.delivered) return "✅"; // Delivered
+    return "⏳"; // Pending
+  };
+
+  return (
+    <div className="flex flex-col h-screen p-4">
+      <div className="flex-1 overflow-y-auto space-y-2">
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`p-2 rounded-xl max-w-xs ${
+              msg.sender_id === user?.id ? "bg-green-500 text-white ml-auto" : "bg-gray-200"
+            }`}
+          >
+            <p>{msg.content}</p>
+            <span className="text-xs opacity-70">{renderTick(msg)}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex mt-2">
+        <input
+          className="flex-1 border rounded-xl p-2"
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder="Type a message..."
+        />
+        <button
+          onClick={sendMessage}
+          className="ml-2 bg-green-500 text-white px-4 rounded-xl"
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default Chat;          }
         )
         .subscribe();
 

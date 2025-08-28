@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      chat_views: {
+        Row: {
+          chat_id: string
+          id: string
+          user_id: string
+          viewed_at: string | null
+        }
+        Insert: {
+          chat_id: string
+          id?: string
+          user_id: string
+          viewed_at?: string | null
+        }
+        Update: {
+          chat_id?: string
+          id?: string
+          user_id?: string
+          viewed_at?: string | null
+        }
+        Relationships: []
+      }
+      chats: {
+        Row: {
+          created_at: string | null
+          id: string
+          last_message: string | null
+          last_message_at: string | null
+          user1: string | null
+          user2: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          user1?: string | null
+          user2?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          user1?: string | null
+          user2?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chats_user1_fkey"
+            columns: ["user1"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chats_user2_fkey"
+            columns: ["user2"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           created_at: string
@@ -43,42 +106,55 @@ export type Database = {
       }
       messages: {
         Row: {
+          chat_id: string | null
           content: string
-          created_at: string
-          deleted_by_receiver: boolean | null
-          deleted_by_sender: boolean | null
+          created_at: string | null
           id: string
-          is_deleted: boolean | null
-          message_type: Database["public"]["Enums"]["message_type"]
-          receiver_id: string
-          sender_id: string
-          status: Database["public"]["Enums"]["message_status"]
+          read: boolean
+          receiver_id: string | null
+          sender_id: string | null
         }
         Insert: {
+          chat_id?: string | null
           content: string
-          created_at?: string
-          deleted_by_receiver?: boolean | null
-          deleted_by_sender?: boolean | null
+          created_at?: string | null
           id?: string
-          is_deleted?: boolean | null
-          message_type?: Database["public"]["Enums"]["message_type"]
-          receiver_id: string
-          sender_id: string
-          status?: Database["public"]["Enums"]["message_status"]
+          read?: boolean
+          receiver_id?: string | null
+          sender_id?: string | null
         }
         Update: {
+          chat_id?: string | null
           content?: string
-          created_at?: string
-          deleted_by_receiver?: boolean | null
-          deleted_by_sender?: boolean | null
+          created_at?: string | null
           id?: string
-          is_deleted?: boolean | null
-          message_type?: Database["public"]["Enums"]["message_type"]
-          receiver_id?: string
-          sender_id?: string
-          status?: Database["public"]["Enums"]["message_status"]
+          read?: boolean
+          receiver_id?: string | null
+          sender_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -86,6 +162,7 @@ export type Database = {
           full_name: string
           id: string
           online: boolean
+          typing: boolean
           updated_at: string
           username: string
         }
@@ -94,6 +171,7 @@ export type Database = {
           full_name: string
           id: string
           online?: boolean
+          typing?: boolean
           updated_at?: string
           username: string
         }
@@ -102,6 +180,7 @@ export type Database = {
           full_name?: string
           id?: string
           online?: boolean
+          typing?: boolean
           updated_at?: string
           username?: string
         }
@@ -112,7 +191,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      mark_messages_as_read: {
+        Args: { p_chat_id: string; p_user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       message_status: "sent" | "delivered" | "read"

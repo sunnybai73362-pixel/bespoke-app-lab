@@ -161,6 +161,7 @@ export type Database = {
           avatar_url: string | null
           full_name: string
           id: string
+          last_seen: string | null
           online: boolean
           typing: boolean
           updated_at: string
@@ -170,6 +171,7 @@ export type Database = {
           avatar_url?: string | null
           full_name: string
           id: string
+          last_seen?: string | null
           online?: boolean
           typing?: boolean
           updated_at?: string
@@ -179,6 +181,7 @@ export type Database = {
           avatar_url?: string | null
           full_name?: string
           id?: string
+          last_seen?: string | null
           online?: boolean
           typing?: boolean
           updated_at?: string

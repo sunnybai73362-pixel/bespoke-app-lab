@@ -6,10 +6,10 @@ export interface Message {
   id: string
   content: string
   sender_id: string
-  receiver_id: string
+  receiver_id: string | null
   created_at: string
-  message_type: 'text' | 'image' | 'file'
-  status: 'sent' | 'delivered' | 'read'
+  read: boolean
+  chat_id?: string | null
 }
 
 export const useMessages = (conversationPartnerId: string | null) => {
@@ -70,13 +70,13 @@ export const useMessages = (conversationPartnerId: string | null) => {
 
     const { error } = await supabase
       .from('messages')
-      .insert([{
-        content: content.trim(),
-        sender_id: user.id,
-        receiver_id: conversationPartnerId,
-        message_type: 'text',
-        status: 'sent'
-      }])
+      .insert([
+        {
+          content: content.trim(),
+          sender_id: user.id,
+          receiver_id: conversationPartnerId,
+        },
+      ])
 
     if (error) {
       console.error('Error sending message:', error)

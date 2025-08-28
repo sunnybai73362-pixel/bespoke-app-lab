@@ -24,40 +24,64 @@ export const useContacts = () => {
     const fetchContacts = async () => {
       setLoading(true)
       
-      // Get conversations with contact details
-      const { data: conversations, error } = await supabase
+      // Step 1: Fetch conversations for current user
+      const { data: conversations, error: convError } = await supabase
         .from('conversations')
-        .select(`
-          *,
-          participant_1_profile:profiles!conversations_participant_1_fkey(*),
-          participant_2_profile:profiles!conversations_participant_2_fkey(*)
-        `)
+        .select('id, participant_1, participant_2, last_message, last_message_at')
         .or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`)
         .order('last_message_at', { ascending: false })
 
-      if (error) {
-        console.error('Error fetching contacts:', error)
+      if (convError) {
+        console.error('Error fetching contacts:', convError)
         setLoading(false)
         return
       }
 
-      // Transform conversations to contacts
-      const contactsData = conversations?.map(conv => {
-        const otherParticipant = conv.participant_1 === user.id 
-          ? conv.participant_2_profile 
-          : conv.participant_1_profile
-          
+      const otherIds = Array.from(
+        new Set(
+          (conversations || []).map((c: any) =>
+            c.participant_1 === user.id ? c.participant_2 : c.participant_1
+          )
+        )
+      )
+
+      if (otherIds.length === 0) {
+        setContacts([])
+        setLoading(false)
+        return
+      }
+
+      // Step 2: Fetch profiles for those users
+      const { data: profiles, error: profError } = await supabase
+        .from('profiles')
+        .select('id, username, full_name, avatar_url, online')
+        .in('id', otherIds)
+
+      if (profError) {
+        console.error('Error fetching profiles:', profError)
+        setLoading(false)
+        return
+      }
+
+      const profileMap: Record<string, any> = {}
+      ;(profiles || []).forEach((p: any) => {
+        profileMap[p.id] = p
+      })
+
+      const contactsData = (conversations || []).map((conv: any) => {
+        const otherId = conv.participant_1 === user.id ? conv.participant_2 : conv.participant_1
+        const other = profileMap[otherId]
         return {
-          id: otherParticipant.id,
-          username: otherParticipant.username,
-          full_name: otherParticipant.full_name,
-          avatar_url: otherParticipant.avatar_url,
-          online: otherParticipant.online,
+          id: other?.id || otherId,
+          username: other?.username || 'Unknown',
+          full_name: other?.full_name || 'Unknown User',
+          avatar_url: other?.avatar_url || null,
+          online: !!other?.online,
           last_message: conv.last_message,
           last_message_at: conv.last_message_at,
           unread_count: 0 // TODO: Implement unread count logic
         }
-      }) || []
+      })
 
       setContacts(contactsData)
       setLoading(false)
@@ -96,10 +120,14 @@ export const useContacts = () => {
           event: '*',
           schema: 'public',
           table: 'conversations',
-          filter: `or(participant_1.eq.${user.id},participant_2.eq.${user.id})`
         },
-        () => {
-          fetchContacts() // Refetch on conversation changes
+        (payload) => {
+          const row: any = (payload as any).new || (payload as any).old
+          if (!row) return
+          const involved = row.participant_1 === user.id || row.participant_2 === user.id
+          if (involved) {
+            fetchContacts() // Refetch on conversation changes
+          }
         }
       )
       .subscribe()

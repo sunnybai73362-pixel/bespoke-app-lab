@@ -112,15 +112,8 @@ export const ChatWindow = ({ selectedChatId }: ChatWindowProps) => {
                       {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                     {isMe && (
-                      <div className="flex">
-                        <div className={`w-1 h-1 rounded-full ${
-                          message.status === 'read' ? 'bg-blue-400' : 
-                          message.status === 'delivered' ? 'bg-gray-400' : 'bg-gray-300'
-                        }`}></div>
-                        <div className={`w-1 h-1 rounded-full ml-0.5 ${
-                          message.status === 'read' ? 'bg-blue-400' : 
-                          message.status === 'delivered' ? 'bg-gray-400' : 'bg-gray-300'
-                        }`}></div>
+                      <div className="text-[10px] opacity-70 ml-2">
+                        {message.read ? '✓✓' : '✓'}
                       </div>
                     )}
                   </div>
